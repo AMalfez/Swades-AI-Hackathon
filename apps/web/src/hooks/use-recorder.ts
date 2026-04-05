@@ -9,6 +9,7 @@ export interface WavChunk {
   url: string
   duration: number
   timestamp: number
+  transcription?: string
 }
 
 export type RecorderStatus = "idle" | "requesting" | "recording" | "paused"
@@ -48,6 +49,24 @@ function encodeWav(samples: Float32Array, sampleRate: number): Blob {
   }
 
   return new Blob([buffer], { type: "audio/wav" })
+}
+
+async function transcribeChunk(blob: Blob): Promise<string> {
+  const formData = new FormData()
+  formData.append("audio", blob, "chunk.wav")
+
+  try {
+    const response = await fetch("http://localhost:3000/transcribe", {
+      method: "POST",
+      body: formData,
+    })
+    if (!response.ok) throw new Error("Transcription failed")
+    const data = await response.json()
+    return data.transcription || ""
+  } catch (error) {
+    console.error("Transcription error:", error)
+    return ""
+  }
 }
 
 function resample(input: Float32Array, fromRate: number, toRate: number): Float32Array {
@@ -109,6 +128,14 @@ export function useRecorder(options: UseRecorderOptions = {}) {
       timestamp: Date.now(),
     }
     setChunks((prev) => [...prev, chunk])
+
+    // Transcribe the chunk asynchronously
+    ;(async () => {
+      const transcription = await transcribeChunk(blob)
+      setChunks((prev) =>
+        prev.map((c) => (c.id === chunk.id ? { ...c, transcription } : c))
+      )
+    })()
   }, [])
 
   const start = useCallback(async () => {
@@ -137,27 +164,7 @@ export function useRecorder(options: UseRecorderOptions = {}) {
         sampleCountRef.current += resampled.length
 
         if (sampleCountRef.current >= chunkThreshold) {
-          // flush synchronously from the collected buffers
-          const totalLen = samplesRef.current.reduce((n, b) => n + b.length, 0)
-          const merged = new Float32Array(totalLen)
-          let off = 0
-          for (const buf of samplesRef.current) {
-            merged.set(buf, off)
-            off += buf.length
-          }
-          samplesRef.current = []
-          sampleCountRef.current = 0
-
-          const blob = encodeWav(merged, SAMPLE_RATE)
-          const url = URL.createObjectURL(blob)
-          const chunk: WavChunk = {
-            id: crypto.randomUUID(),
-            blob,
-            url,
-            duration: merged.length / SAMPLE_RATE,
-            timestamp: Date.now(),
-          }
-          setChunks((prev) => [...prev, chunk])
+          flushChunk()
         }
       }
 

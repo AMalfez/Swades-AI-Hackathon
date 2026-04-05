@@ -62,6 +62,9 @@ function ChunkRow({ chunk, index }: { chunk: WavChunk; index: number }) {
       </span>
       <span className="text-xs tabular-nums">{formatDuration(chunk.duration)}</span>
       <span className="text-[10px] text-muted-foreground">16kHz PCM</span>
+      <div className="flex-1 text-xs text-muted-foreground">
+        {chunk.transcription ? chunk.transcription : "Transcribing..."}
+      </div>
       <div className="ml-auto flex gap-1">
         <Button variant="ghost" size="icon-xs" onClick={toggle}>
           {playing ? <Square className="size-3" /> : <Play className="size-3" />}
