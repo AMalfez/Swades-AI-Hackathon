@@ -1,6 +1,6 @@
-# Reliable Recording Chunking Pipeline
+# Reliable Recording + Chunk Transcription
 
-An assignment for building a reliable chunking setup that ensures recording data stays accurate in all cases — no data loss, no silent failures.
+A monorepo app that records audio in the browser, chunks it into 5-second WAV segments, and sends each chunk to a backend service for transcription.
 
 ## How It Works
 
@@ -28,116 +28,79 @@ Client (Browser)
 
 ## Tech Stack
 
-- **Next.js** — Frontend (App Router)
+- **Next.js** — Frontend app router and UI
 - **Hono** — Backend API server
-- **Bun** — Runtime
-- **Drizzle ORM + PostgreSQL** — Database
-- **TailwindCSS + shadcn/ui** — UI
-- **Turborepo** — Monorepo build system
+- **Bun** — Runtime for the server
+- **OpenAI** — Whisper transcription service
+- **PostgreSQL / Drizzle ORM** — database package support
+- **TailwindCSS + shadcn/ui** — UI components
+- **Turborepo** — monorepo task orchestration
 
 ## Getting Started
+
+Install dependencies from the monorepo root:
 
 ```bash
 npm install
 ```
 
-### Database Setup
+### Configure environment
 
-1. Make sure you have a PostgreSQL database set up.
-2. Update your `apps/server/.env` with your PostgreSQL connection details.
-3. Apply the schema:
+Update `apps/server/.env` with:
 
-```bash
-npm run db:push
-```
+- `DATABASE_URL` — your PostgreSQL connection string
+- `CORS_ORIGIN` — e.g. `http://localhost:3001`
+- `NEXT_PUBLIC_SERVER_URL` — e.g. `http://localhost:3000`
+- `OPENAI_API_KEY` — your OpenAI API key
 
-### Run Development
+### Run the app
+
+From the repo root:
 
 ```bash
 npm run dev
 ```
 
-- Web app: [http://localhost:3001](http://localhost:3001)
-- API server: [http://localhost:3000](http://localhost:3000)
-
-## Load Testing
-
-Target: **300,000 requests** to validate the chunking pipeline under heavy load.
-
-### Setup
-
-Use a load testing tool like [k6](https://k6.io), [autocannon](https://github.com/mcollina/autocannon), or [artillery](https://artillery.io) to simulate concurrent chunk uploads.
-
-Example with **k6**:
-
-```js
-import http from "k6/http";
-import { check } from "k6";
-
-export const options = {
-  scenarios: {
-    chunk_uploads: {
-      executor: "constant-arrival-rate",
-      rate: 5000,           // 5,000 req/s
-      timeUnit: "1s",
-      duration: "1m",       // → 300K requests in 60s
-      preAllocatedVUs: 500,
-      maxVUs: 1000,
-    },
-  },
-};
-
-export default function () {
-  const payload = JSON.stringify({
-    chunkId: `chunk-${__VU}-${__ITER}`,
-    data: "x".repeat(1024), // 1KB dummy chunk
-  });
-
-  const res = http.post("http://localhost:3000/api/chunks/upload", payload, {
-    headers: { "Content-Type": "application/json" },
-  });
-
-  check(res, {
-    "status 200": (r) => r.status === 200,
-  });
-}
-```
-
-Run:
+Or run only one package:
 
 ```bash
-k6 run load-test.js
+npm run dev:web
+npm run dev:server
 ```
 
-### What to Validate
+- Web app: `http://localhost:3001`
+- API server: `http://localhost:3000`
 
-- **No data loss** — every ack in the DB has a matching chunk in the bucket
-- **OPFS recovery** — chunks survive client disconnects and can be re-uploaded
-- **Throughput** — server handles sustained 5K req/s without dropping chunks
-- **Consistency** — reconciliation catches and repairs any bucket/DB mismatches after the run
+## Notes
 
-## Project Structure
+- The current implementation does not perform speaker diarization.
+- Overlapping speech in a single mixed chunk may be transcribed as mixed text.
+- The backend uses an OpenAI Whisper transcription endpoint at `/transcribe`.
+
+## Project structure
 
 ```
-recoding-assignment/
-├── apps/
-│   ├── web/         # Frontend (Next.js) — chunking, OPFS, upload logic
-│   └── server/      # Backend API (Hono) — bucket upload, DB ack
-├── packages/
-│   ├── ui/          # Shared shadcn/ui components and styles
-│   ├── db/          # Drizzle ORM schema & queries
-│   ├── env/         # Type-safe environment config
-│   └── config/      # Shared TypeScript config
+apps/
+  web/          # Next.js frontend
+  server/       # Hono backend API
+packages/
+  ui/           # shared UI components
+  db/           # Drizzle ORM schema and database tools
+  env/          # environment schema and config
+  config/       # shared TS configuration
 ```
 
-## Available Scripts
+## Useful scripts
 
-- `npm run dev` — Start all apps in development mode
-- `npm run build` — Build all apps
-- `npm run dev:web` — Start only the web app
-- `npm run dev:server` — Start only the server
-- `npm run check-types` — TypeScript type checking
-- `npm run db:push` — Push schema changes to database
-- `npm run db:generate` — Generate database client/types
-- `npm run db:migrate` — Run database migrations
-- `npm run db:studio` — Open database studio UI
+- `npm run dev` — start all apps in development mode
+- `npm run build` — build all apps
+- `npm run dev:web` — start only the web app
+- `npm run dev:server` — start only the server
+- `npm run check-types` — run type checking
+- `npm run db:push` — push database schema changes
+- `npm run db:generate` — generate database client/types
+- `npm run db:migrate` — run database migrations
+- `npm run db:studio` — open database studio UI
+- `npm run check` — run Ultracite lint checks
+- `npm run fix` — auto-fix formatting/lint issues
+
